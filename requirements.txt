@@ -15,4 +15,4 @@ requests==2.31.0
 xhtml2pdf==0.2.17
 reportlab==4.2.0
 arabic-reshaper==3.0.0
-python-bidi==0.4.2
+python-bidi==0.6.7
