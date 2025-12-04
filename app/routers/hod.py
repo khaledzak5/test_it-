@@ -22,8 +22,17 @@ def ensure_barcode_png(code: str) -> str:
     return f"/static/barcodes/{code}.png"
 
 # ---------- مجلد مؤقت آمن داخل المشروع ----------
-_FORCE_TMP = r"C:\x2p_tmp"
-Path(_FORCE_TMP).mkdir(parents=True, exist_ok=True)
+# على Vercel (أو أي لينكس) نستخدم /tmp
+# على ويندوز محلي يمكن استخدام C:\x2p_tmp
+if os.name == "nt":
+    _FORCE_TMP = r"C:\x2p_tmp"
+    try:
+        Path(_FORCE_TMP).mkdir(parents=True, exist_ok=True)
+    except Exception:
+        _FORCE_TMP = tempfile.gettempdir()
+else:
+    _FORCE_TMP = "/tmp"
+
 os.environ["TMPDIR"] = _FORCE_TMP
 os.environ["TMP"]    = _FORCE_TMP
 os.environ["TEMP"]   = _FORCE_TMP
