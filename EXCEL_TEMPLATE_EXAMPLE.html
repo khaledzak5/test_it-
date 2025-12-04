@@ -1,0 +1,236 @@
+<!-- مثال قالب HTML لاستخدام بيانات الإكسيل -->
+<!-- يمكن إضافة هذا الكود في أي صفحة تحتاج إلى بيانات المتدربين -->
+
+<div class="search-section">
+  <h3>البحث عن متدرب</h3>
+  
+  <!-- نموذج البحث -->
+  <form id="studentSearchForm">
+    <input 
+      type="text" 
+      id="studentSearchInput" 
+      placeholder="أدخل اسم أو رقم المتدرب"
+      class="form-control"
+    >
+    <button type="submit" class="btn btn-primary">بحث</button>
+  </form>
+  
+  <!-- نتائج البحث -->
+  <div id="searchResults" class="results-container" style="display: none;">
+    <h4>نتائج البحث</h4>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>رقم المتدرب</th>
+          <th>الاسم</th>
+          <th>التخصص</th>
+          <th>الكلية</th>
+        </tr>
+      </thead>
+      <tbody id="resultsList"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// جلب الـ CSRF token
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
+// معالج نموذج البحث
+document.getElementById('studentSearchForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const query = document.getElementById('studentSearchInput').value.trim();
+  
+  if (!query) {
+    alert('الرجاء إدخال اسم أو رقم المتدرب');
+    return;
+  }
+  
+  try {
+    // البحث عن متدرب برقمه أولاً
+    let response = await fetch(`/api/excel/students/${query}`);
+    let data = await response.json();
+    
+    let results = [];
+    
+    if (data.success) {
+      // وجدنا المتدرب برقمه
+      results = [data.data];
+    } else {
+      // جرّب البحث النصي
+      response = await fetch(`/api/excel/students/search?q=${encodeURIComponent(query)}&limit=10`);
+      data = await response.json();
+      
+      if (data.success && data.results && data.results.length > 0) {
+        results = data.results;
+      }
+    }
+    
+    // عرض النتائج
+    const resultsList = document.getElementById('resultsList');
+    resultsList.innerHTML = '';
+    
+    if (results.length > 0) {
+      results.forEach(student => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${student.student_id || student['student_id'] || '-'}</td>
+          <td>${student.student_Name || student['student_Name'] || '-'}</td>
+          <td>${student.Major || student['Major'] || '-'}</td>
+          <td>${student.College || student['College'] || '-'}</td>
+        `;
+        resultsList.appendChild(row);
+      });
+      document.getElementById('searchResults').style.display = 'block';
+    } else {
+      resultsList.innerHTML = '<tr><td colspan="4" class="text-center">لم يتم العثور على نتائج</td></tr>';
+      document.getElementById('searchResults').style.display = 'block';
+    }
+    
+  } catch (error) {
+    console.error('خطأ في البحث:', error);
+    alert('حدث خطأ في البحث');
+  }
+});
+
+// مثال: جلب بيانات الدواء
+async function getDrugInfo(drugName) {
+  try {
+    const response = await fetch(`/api/excel/drugs/search?name=${encodeURIComponent(drugName)}`);
+    const data = await response.json();
+    
+    if (data.success) {
+      console.log('معلومات الدواء:');
+      console.log('الاسم التجاري:', data.data.trade_name);
+      console.log('الاسم العام:', data.data.generic_name);
+      console.log('القوة:', data.data.strength);
+      console.log('الشكل:', data.data.form);
+      console.log('الكمية المخزنة:', data.data.stock_qty);
+      return data.data;
+    }
+  } catch (error) {
+    console.error('خطأ في جلب بيانات الدواء:', error);
+  }
+}
+
+// مثال: جلب بيانات مريض
+async function getPatientInfo(traineeNo) {
+  try {
+    const response = await fetch(`/api/excel/clinic/patients/${traineeNo}`);
+    const data = await response.json();
+    
+    if (data.success) {
+      console.log('بيانات المريض:', data.data);
+      return data.data;
+    }
+  } catch (error) {
+    console.error('خطأ في جلب بيانات المريض:', error);
+  }
+}
+
+// مثال: جلب الإحصائيات
+async function getStats() {
+  try {
+    const response = await fetch('/api/excel/statistics');
+    const data = await response.json();
+    
+    if (data.success) {
+      console.log('إحصائيات البيانات:', data.statistics);
+      return data.statistics;
+    }
+  } catch (error) {
+    console.error('خطأ في جلب الإحصائيات:', error);
+  }
+}
+</script>
+
+<style>
+.search-section {
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.search-section h3 {
+  color: #333;
+  margin-bottom: 15px;
+  font-weight: bold;
+}
+
+.search-section form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.search-section input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.search-section button {
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.search-section button:hover {
+  background-color: #0056b3;
+}
+
+.results-container {
+  margin-top: 20px;
+}
+
+.results-container h4 {
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.results-container .table {
+  background-color: white;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.results-container .table thead {
+  background-color: #e9ecef;
+}
+
+.results-container .table th,
+.results-container .table td {
+  padding: 12px;
+  text-align: right;
+  border: 1px solid #dee2e6;
+}
+
+.results-container .table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.text-center {
+  text-align: center;
+}
+</style>
