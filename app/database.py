@@ -19,7 +19,7 @@ if all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT]):
         f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     )
 else:
-    SQLALCHEMY_DATABASE_URL = "sqlite:///app.db"
+    SQLALCHEMY_DATABASE_URL = "sqlite:////tmp/app.db"
 
 # إنشاء محرك
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
