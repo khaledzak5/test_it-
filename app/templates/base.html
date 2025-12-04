@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- العنوان من الإعدادات -->
+  <title>{{ app_name or "منصة إدارة خدمات المتدربين" }}</title>
+
+  <!-- فافيكون ديناميكي من الإعدادات، مع احتياطي -->
+  <link rel="icon" type="image/jpeg" href="{{ ui_favicon_url or '/static/images/favicon.jpg' }}">
+  <link rel="apple-touch-icon" href="{{ ui_favicon_url or '/static/images/favicon.jpg' }}">
+  <link rel="shortcut icon" href="{{ ui_favicon_url or '/static/images/favicon.jpg' }}" type="image/jpeg">
+
+  <!-- خطوطك الأصلية -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Noto+Kufi+Arabic:wght@500;700&display=swap" rel="stylesheet">
+
+  <!-- ملفات الستايل -->
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/custom.css"><!-- اختياري: إن كان لديك custom.css -->
+
+  <!-- أنماط مساعدة خفيفة للقوائم والبطاقات -->
+  <style>
+    :root { --container: 1100px; }
+    .container { max-width: var(--container); margin: 0 auto; padding: 0 12px; }
+
+    /* شريط القوائم */
+    .main-nav {
+      background: #1f2937; color: #fff;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+    }
+    .main-nav .nav-inner {
+      display: flex; gap: 10px; align-items: center; padding: 10px 12px;
+      max-width: var(--container); margin: 0 auto;
+    }
+    .main-nav a { color:#fff; text-decoration:none; padding:6px 10px; border-radius:8px; }
+    .main-nav a:hover { background: rgba(255,255,255,.08); }
+    .btn-link { background: transparent; color: #fff; border: 0; cursor: pointer; padding: 6px 10px; border-radius: 8px; }
+    .btn-link:hover { background: rgba(255,255,255,.08); }
+
+    /* مسافة دافعة للعناصر يمين/يسار حسب RTL */
+    .nav-spacer { margin-inline-start: auto; }
+
+    /* بطاقات وأدوات عامة (لطيفة وخفيفة) */
+    .card { background:#fff; border:1px solid #eee; border-radius:14px; padding:14px; margin-bottom:12px; }
+    .card-head { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+    .card-icon { font-size:1.2rem; }
+    .alert { padding:10px 12px; border-radius:10px; margin:10px 0; }
+    .alert-success { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+    .alert-danger { background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
+    .form label { display:flex; flex-direction:column; gap:6px; }
+    .form input, .form select, .form textarea {
+      padding:8px 10px; border:1px solid #e6e6e6; border-radius:10px; font-family:inherit;
+    }
+    .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .actions { display:flex; gap:8px; align-items:center; }
+    .btn { padding:8px 12px; border-radius:10px; border:0; cursor:pointer; }
+    .btn-primary { background:#2563eb; color:#fff; }
+    .btn-secondary { background:#e5e7eb; color:#111827; }
+    .muted { color:#6b7280; }
+
+    /* تحجيم المسافات داخل الصفحة */
+    main.container { padding-top: 16px; padding-bottom: 24px; }
+    .breadcrumb { color:#6b7280; font-size:.92rem; margin-top:8px; }
+
+    /* تكيّف الشعار مع السطر */
+    .site-header .header-inner { display:flex; align-items:center; gap:14px; padding: 12px 0; }
+    .site-header .logo { height: 220px; width: auto; }
+    .site-header .site-title { margin:0; font-weight:700; }
+
+    /* فوتر أنيق */
+    .site-footer { background:#f9fafb; padding:12px 0; text-align:center; font-size:.9rem; color:#4b5563; }
+  </style>
+</head>
+<body>
+  <!-- الهيدر -->
+  <header class="site-header">
+    <div class="topband"></div>
+    <div class="container header-inner">
+      {% if ui_logo_url %}
+        <img src="{{ ui_logo_url }}" alt="{{ app_name or 'Logo' }}" class="logo">
+      {% else %}
+        <img src="/static/images/logo.jpg" alt="{{ app_name or 'Logo' }}" class="logo">
+      {% endif %}
+      <div class="titles">
+        <h1 class="site-title">{{ app_name or "منصة إدارة خدمات المتدربين" }}</h1>
+        <div class="breadcrumb">{% block breadcrumb %}{% endblock %}</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- شريط القوائم الديناميكي حسب صلاحيات المستخدم -->
+  <nav class="main-nav">
+    <div class="nav-inner">
+      <a href="/">🏠 الرئيسية</a>
+
+      {# نقرأ المستخدم من الجلسة مباشرة (قاموس) #}
+      {% set cu = request.session.get('user') %}
+      {% set display_name = (cu.get('full_name') if cu and cu.get('full_name') else (cu.get('username') if cu and cu.get('username') else 'مستخدم')) %}
+
+      {% if cu %}
+        {# القوائم حسب الصلاحيات #}
+        {% if cu.get('is_hod') %}
+          <a href="/hod/">📋 لوحة رئيس القسم</a>
+          <a href="/hod/courses">📚 الدورات</a>
+          <a href="/hod/courses/new">➕ إضافة دورة</a>
+        {% endif %}
+
+        {% if cu.get('is_college_admin') %}
+          <a href="/admin/">📋 لوحة أدمن الكلية</a>
+          <a href="/hod/courses">📚 الدورات</a>
+          <a href="/hod/courses/new">➕ إضافة دورة</a>
+          <a href="/hod/skills-record">📑 سجلات المتدربين</a>
+        {% endif %}
+
+        {% if cu.get('is_admin') %}
+          <a href="/admin/">🛠️ لوحة الأدمن</a>
+
+          <!-- المزيد لمسارات الأدمن الثانوية -->
+          <div class="nav-more">
+            <button type="button">المزيد ▾</button>
+            <div class="more-menu">
+              <a href="/admin/users">👥 إدارة المستخدمين</a>
+              <a href="/admin/departments">🏫 إدارة الأقسام</a>
+              <a href="/admin/colleges">🎓 إدارة الكليات</a>
+              <a href="/admin/settings">⚙️ الإعدادات</a>
+              <a href="/admin/excel-data">📊 بيانات Excel</a>
+              <a href="/admin/audit">📜 السجلات</a>
+              <a href="/admin/backup">💾 النسخ الاحتياطي</a>
+            </div>
+          </div>
+        {% endif %}
+
+        {# 👇 روابط العيادة/المخزون/الصناديق تظهر لمن لديه is_doc #}
+        {% if cu.get('is_doc') %}
+          <a href="/clinic/">🏥 العيادة</a>
+          <a href="/inventory/">📦 المخزون</a>
+          <a href="/first-aid/">🧰 صناديق الإسعافات</a>
+        {% endif %}
+
+        <!-- دافع العناصر التالية لليسار (RTL) -->
+        <div class="nav-spacer"></div>
+
+        <!-- التحية + رابط البروفايل + زر الخروج -->
+        <div class="navbar-right">
+          <span class="greeting">مرحبًا {{ display_name }}</span>
+          <a href="/profile/" class="btn-link" title="ملفي الشخصي">👤 ملفي</a>
+          <form method="post" action="/auth/logout" style="margin:0;">
+            <button class="btn-link btn-logout" title="تسجيل الخروج">🚪 خروج</button>
+          </form>
+        </div>
+      {% else %}
+        <!-- زائر غير مسجّل -->
+        <div class="nav-spacer"></div>
+        <a href="/auth/login">🔐 تسجيل الدخول</a>
+      {% endif %}
+    </div>
+  </nav>
+
+  <!-- المحتوى -->
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- الفوتر: نص ديناميكي مع احتياطي -->
+  <footer class="site-footer">
+    <div class="container">
+      <small>
+        {{ ui_footer or "© المؤسسة العامة للتدريب التقني والمهني – الكلية التقنية بنجران – نظام Guidxus لإدارة خدمات المتدربين" }}
+      </small>
+    </div>
+  </footer>
+
+  <!-- ملفات الجافاسكربت -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
+
