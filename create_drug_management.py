@@ -19,10 +19,14 @@ try:
             generic_name TEXT,
             strength TEXT,
             form TEXT,
+            manufacturer TEXT,
             unit TEXT,
             reorder_level INTEGER DEFAULT 0,
             is_active BOOLEAN DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_by INTEGER
         )
     '''))
     print("✓ تم إنشاء جدول drugs")
