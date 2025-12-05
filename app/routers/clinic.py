@@ -232,6 +232,8 @@ def export_rest_notice_by_visit(
             "national_id": card.get("id_no"),
             "mobile": card.get("mobile"),
             "major": card.get("major"),
+            "birth_date": card.get("birth_date"),
+            "age": card.get("age"),
         },
         "visit_date": (
             v["visit_at"].date().isoformat() if hasattr(v.get("visit_at"), 'date') 
@@ -514,7 +516,7 @@ def _get_patient_card(db: Session, patient_key: str):
                             "mobile": student.get('mobile', ''),
                             "major": student.get('Major', ''),
                             "college": student.get('College', ''),
-                            "birth_date": None,
+                            "birth_date": student.get('birth_date') or student.get('DOB') or None,
                         }
                 except Exception:
                     pass
@@ -525,10 +527,27 @@ def _get_patient_card(db: Session, patient_key: str):
         age = None
         if patient.get("birth_date"):
             try:
-                bd: date = patient["birth_date"]
-                today = date.today()
-                age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
-            except Exception:
+                # التعامل مع أنواع التواريخ المختلفة
+                bd = patient["birth_date"]
+                if isinstance(bd, str):
+                    # محاولة تحليل النص
+                    from datetime import datetime
+                    # جرب YYYY-MM-DD أولاً
+                    try:
+                        bd = datetime.strptime(bd, "%Y-%m-%d").date()
+                    except:
+                        # جرب DD/MM/YYYY
+                        try:
+                            bd = datetime.strptime(bd, "%d/%m/%Y").date()
+                        except:
+                            bd = None
+                
+                if bd and isinstance(bd, date):
+                    today = date.today()
+                    age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+                    if age < 0:
+                        age = None
+            except Exception as e:
                 age = None
 
         return {
@@ -562,6 +581,8 @@ def clinic_index(request: Request, user=Depends(require_doc), db: Session = Depe
         "pharmacy_drugs": safe_count("SELECT COUNT(*) FROM drugs"),
         "pharmacy_stock": safe_count("SELECT SUM(balance_qty) FROM pharmacy_stock"),
         "pharmacy_movements": safe_count("SELECT COUNT(*) FROM drug_movements"),
+        "first_aid_boxes": safe_count("SELECT COUNT(*) FROM first_aid_boxes"),
+        "first_aid_items": safe_count("SELECT COUNT(*) FROM first_aid_box_items"),
     }
     return templates.TemplateResponse("clinic/index.html", {"request": request, "stats": stats})
 
@@ -1265,23 +1286,12 @@ def visit_create(
     # صرف الدواء
     rx_json: str | None = Form(default=None),
 ):
-    # مُرجِع موحّد لنفس صفحة المراجع مع القيم المدخلة
+    # مُرجِع موحّد للأخطاء - ترجع JSON بدلاً من HTML
     def _return_with_error(msg: str):
-        card = _get_patient_card(db, patient_key)
-        form_vals = {
-            "age_years": age_years, "temp": temp, "bp": bp, "pulse": pulse, "resp": resp,
-            "weight_kg": weight_kg, "height_cm": height_cm,
-            "glucose_mg": glucose_mg, "o2_sat": o2_sat,                   # جديد
-            "complaint": complaint, "diagnosis": diagnosis, "notes": notes,
-            "recommendation": recommendation, "rest_days": rest_days,
-            "rec_to": rec_to, "rec_summary": rec_summary,
-            "chronic": chronic, "chronic_other": chronic_other,            # جديد
-            "rx_json": rx_json or ""
-        }
-        return templates.TemplateResponse(
-            "clinic/visit_form.html",
-            {"request": request, "patient_card": card, "error": msg, "form_vals": form_vals}
-        )
+        return JSONResponse({
+            "success": False,
+            "error": msg
+        }, status_code=400)
 
     try:
         uid = (request.session.get("user") or {}).get("id")
@@ -1495,12 +1505,49 @@ def visit_create(
             })
 
         db.commit()
-        return RedirectResponse(url="/clinic/?msg=visit_saved", status_code=303)
+        
+        # الحصول على معرّف الزيارة المُنشأة للتو
+        # استخدم آخر INSERT ID
+        if is_sqlite():
+            last_visit = db.execute(text("""
+                SELECT last_insert_rowid() as id
+            """)).first()
+            visit_id = last_visit[0] if last_visit else None
+        else:
+            # PostgreSQL: استخدم RETURNING id
+            last_visit = db.execute(text("""
+                SELECT id FROM clinic_patients
+                WHERE record_kind = 'visit' 
+                AND patient_type = :ptype 
+                AND (trainee_no = :pno OR employee_no = :pno)
+                ORDER BY visit_at DESC LIMIT 1
+            """), {"ptype": ptype, "pno": pno}).mappings().first()
+            visit_id = last_visit["id"] if last_visit else None
+        
+        # إرجاع JSON بدلاً من redirect – يحتوي على معرّف الزيارة للطباعة
+        return JSONResponse({
+            "success": True,
+            "visit_id": visit_id,
+            "patient_key": patient_key,
+            "recommendation": rec_type,  # 'rest', 'referral', أو 'none'
+            "rest_days": rest_i,
+            "rec_to": rec_detail_norm,
+            "rec_summary": rec_summary,
+            "message": "تم حفظ الزيارة بنجاح"
+        })
 
     except Exception as ex:
         db.rollback()
-        # رجوع لنفس صفحة المراجع مع القيم المُدخلة
-        return _return_with_error(str(ex))
+        import traceback
+        error_msg = f"{str(ex)}\n{traceback.format_exc()}"
+        print(f"\n=== ERROR in visit_create ===")
+        print(error_msg)
+        print("="*50)
+        # إرجاع JSON بدلاً من HTML – لتسهيل معالجة الأخطاء في JavaScript
+        return JSONResponse({
+            "success": False,
+            "error": str(ex)
+        }, status_code=400)
 
     # --------------------------------------------------------------------
     # النسخة التراثية (أُبقيت للتطابق الشكلي مع طول وبنية الدالة الأصلية).

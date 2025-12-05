@@ -192,7 +192,7 @@ def stock_moves_page(
         ORDER BY d.trade_name
     ''')).fetchall()
     
-    # تحويل النتائج إلى قائمة من القواموس
+    # تحويل النتائج إلى قائمة من القواميس
     drugs = [
         {
             'id': row[0],
@@ -218,6 +218,17 @@ def stock_moves_page(
         "msg": msg
     })
 
+@router.post("/stock-moves", dependencies=[Depends(require_doc)])
+def stock_moves_process(
+    request: Request,
+    user=Depends(require_doc),
+    db: Session = Depends(get_db)
+):
+    """معالجة طلب التوريد"""
+    # يمكنك هنا إضافة منطق التوريد الفعلي لاحقاً
+    return RedirectResponse(url="/inventory/stock-moves?msg=supply_ok", status_code=303)
+
+@router.get("/supply-drugs/process")
 @router.post("/supply-drugs/process")
 def process_drug_supply(
     request: Request,
@@ -305,7 +316,7 @@ def supply_to_boxes_page(
         ORDER BY d.trade_name
     ''')).fetchall()
     
-    # تحويل النتائج إلى قائمة من القواموس
+    # تحويل النتائج إلى قائمة من القواميس
     drugs = [
         {
             'id': row[0],
@@ -437,3 +448,4 @@ def process_supply_to_boxes(
         "box_name": box.box_name,
         "quantity": quantity
     }
+

@@ -42,9 +42,10 @@ def _find_drug_by_query(db: Session, q: str) -> Dict[str, Any]:
 
     # لو المستخدم كتب رقماً فقط (احتمال قصد id)
     if s.isdigit():
-        row = db.execute(text("""
+        table_name = "public.drugs" if not is_sqlite() else "drugs"
+        row = db.execute(text(f"""
             SELECT id, trade_name, generic_name, strength, form
-            FROM public.drugs
+            FROM {table_name}
             WHERE is_active=TRUE AND id=:id
             LIMIT 1
         """), {"id": int(s)}).mappings().first()
@@ -78,9 +79,10 @@ def _find_drug_by_query(db: Session, q: str) -> Dict[str, Any]:
 
     where_extra = (" AND " + " AND ".join(conds)) if conds else ""
 
+    table_name = "public.drugs" if not is_sqlite() else "drugs"
     rows = db.execute(text(f"""
         SELECT id, trade_name, generic_name, strength, form, COALESCE(manufacturer,'') AS manufacturer
-        FROM public.drugs
+        FROM {table_name}
         WHERE is_active=TRUE {where_extra}
         ORDER BY id
         LIMIT 20
@@ -109,14 +111,17 @@ def _main_pharma_id(db: Session) -> int:
 def pharmacy_home(request: Request, db: Session = Depends(get_db)):
     try:
         # جرّب من قاعدة البيانات أولاً
-        totals = db.execute(text("""
+        drug_table = "public.drugs" if not is_sqlite() else "drugs"
+        stock_table = "public.v_drug_stock" if not is_sqlite() else "v_drug_stock"
+        loc_table = "public.locations" if not is_sqlite() else "locations"
+        totals = db.execute(text(f"""
             SELECT
-              (SELECT COUNT(*) FROM public.drugs WHERE is_active) AS active_drugs,
+              (SELECT COUNT(*) FROM {drug_table} WHERE is_active) AS active_drugs,
               COALESCE((
                 SELECT SUM(stock_qty)
-                FROM public.v_drug_stock
+                FROM {stock_table}
                 WHERE location_id=(
-                  SELECT id FROM public.locations WHERE code='MAIN-PHARMA' LIMIT 1
+                  SELECT id FROM {loc_table} WHERE code='MAIN-PHARMA' LIMIT 1
                 )
               ),0) AS total_stock
         """)).mappings().first()
@@ -220,10 +225,15 @@ def drugs_create(request: Request,
                  manufacturer: Optional[str] = Form(default=None),
                  db: Session = Depends(get_db)):
     try:
-        db.execute(text("""
-            INSERT INTO public.drugs (trade_name, generic_name, strength, form, manufacturer, is_active, created_by)
-            VALUES (:tn, :gn, :st, :fm, :m, TRUE, :uid)
-        """), {"tn": trade_name.strip(), "gn": _clean(generic_name), "st": _clean(strength),
+        table_name = "public.drugs" if not is_sqlite() else "drugs"
+        # توليد drug_code تلقائياً من الاسم التجاري
+        import uuid
+        drug_code = f"DRUG-{uuid.uuid4().hex[:8].upper()}"
+        
+        db.execute(text(f"""
+            INSERT INTO {table_name} (drug_code, trade_name, generic_name, strength, form, manufacturer, is_active, created_by)
+            VALUES (:dc, :tn, :gn, :st, :fm, :m, TRUE, :uid)
+        """), {"dc": drug_code, "tn": trade_name.strip(), "gn": _clean(generic_name), "st": _clean(strength),
                "fm": _clean(form), "m": _clean(manufacturer), "uid": _uid(request)})
         db.commit()
         return RedirectResponse(url="/clinic/pharmacy/drugs?msg=added", status_code=303)
@@ -242,14 +252,16 @@ def drugs_update(request: Request,
                  manufacturer: Optional[str] = Form(default=None),
                  db: Session = Depends(get_db)):
     try:
-        db.execute(text("""
-            UPDATE public.drugs
+        table_name = "public.drugs" if not is_sqlite() else "drugs"
+        timestamp_col = "now()" if not is_sqlite() else "CURRENT_TIMESTAMP"
+        db.execute(text(f"""
+            UPDATE {table_name}
                SET trade_name=:tn,
                    generic_name=:gn,
                    strength=:st,
                    form=:fm,
                    manufacturer=:m,
-                   updated_at=now(),
+                   updated_at={timestamp_col},
                    updated_by=:uid
              WHERE id=:id AND is_active=TRUE
         """), {"id": drug_id, "tn": trade_name.strip(), "gn": _clean(generic_name),
@@ -325,37 +337,68 @@ def movements_log(
         def build_base_where() -> tuple[str, dict]:
             where = "WHERE 1=1"
             params: dict = {}
-            if move_type in ("in","out","adjust"):
-                where += " AND m.move_type=:t"
+            if move_type:
+                where += " AND m.movement_type=:t"
                 params["t"] = move_type
             if df:
-                where += " AND m.created_at::date >= :df"
+                if is_sqlite():
+                    where += " AND DATE(m.created_at) >= :df"
+                else:
+                    where += " AND m.created_at::date >= :df"
                 params["df"] = df
             if dt:
-                where += " AND m.created_at::date <= :dt"
+                if is_sqlite():
+                    where += " AND DATE(m.created_at) <= :dt"
+                else:
+                    where += " AND m.created_at::date <= :dt"
                 params["dt"] = dt
             return where, params
 
         def run_query(where: str, params: dict):
+            # استخدم أسماء الجداول والأعمدة الصحيحة
+            drugs_table = "drugs" if is_sqlite() else "public.drugs"
+            movements_table = "drug_stock_movements" if is_sqlite() else "public.drug_stock_movements"
+            transactions_table = "drug_transactions" if is_sqlite() else "public.drug_transactions"
+            users_table = "users" if is_sqlite() else "public.users"
+            
             sql = f"""
-                SELECT
-                  m.id, m.created_at, m.move_type, m.qty, m.ref_note,
-                  d.id AS drug_id,
-                  COALESCE(d.trade_name,'')   AS trade_name,
-                  COALESCE(d.generic_name,'') AS generic_name,
-                  COALESCE(d.strength,'')     AS strength,
-                  COALESCE(d.form,'')         AS form,
-                  u.full_name AS user_name,
-                  CASE
-                    WHEN m.move_type='out' THEN CASE WHEN m.qty>0 THEN -m.qty ELSE m.qty END
-                    WHEN m.move_type='in'  THEN CASE WHEN m.qty<0 THEN -m.qty ELSE m.qty END
-                    ELSE m.qty
-                  END AS effective_qty
-                FROM public.drug_movements m
-                LEFT JOIN public.drugs d ON d.id = m.drug_id
-                LEFT JOIN public.users u ON u.id = m.created_by
+                SELECT * FROM (
+                    SELECT
+                      m.id, m.created_at, m.movement_type as move_type, m.quantity_change as qty, m.notes as ref_note,
+                      d.id AS drug_id,
+                      COALESCE(d.trade_name, '') AS trade_name,
+                      COALESCE(d.generic_name, '') AS generic_name,
+                      COALESCE(d.strength, '') AS strength,
+                      COALESCE(d.form, '') AS form,
+                      m.drug_name AS drug_name,
+                      u.full_name AS user_name,
+                      CASE
+                        WHEN m.movement_type='out' THEN CASE WHEN m.quantity_change>0 THEN -m.quantity_change ELSE m.quantity_change END
+                        WHEN m.movement_type='in'  THEN CASE WHEN m.quantity_change<0 THEN -m.quantity_change ELSE m.quantity_change END
+                        ELSE m.quantity_change
+                      END AS effective_qty
+                    FROM {movements_table} m
+                    LEFT JOIN {drugs_table} d ON (d.id = m.drug_code OR UPPER(d.drug_code) = UPPER(CAST(m.drug_code AS TEXT)))
+                    LEFT JOIN {users_table} u ON u.id = m.created_by
+                    
+                    UNION ALL
+                    
+                    SELECT
+                      t.id, t.created_at, t.transaction_type as move_type, t.quantity_change as qty, t.notes as ref_note,
+                      d.id AS drug_id,
+                      COALESCE(d.trade_name, '') AS trade_name,
+                      COALESCE(d.generic_name, '') AS generic_name,
+                      COALESCE(d.strength, '') AS strength,
+                      COALESCE(d.form, '') AS form,
+                      d.trade_name AS drug_name,
+                      u.full_name AS user_name,
+                      t.quantity_change AS effective_qty
+                    FROM {transactions_table} t
+                    LEFT JOIN {drugs_table} d ON d.id = t.drug_id
+                    LEFT JOIN {users_table} u ON u.id = t.created_by
+                ) AS combined
                 {where}
-                ORDER BY m.created_at DESC
+                ORDER BY created_at DESC
                 {limit_sql}
             """
             return db.execute(text(sql), params).mappings().all()
@@ -385,10 +428,11 @@ def movements_log(
         # 3) لو ما فيه نتيجة ولسه فيه ID، ابنِ نص من بطاقة الدواء وبحث به
         if not rows and d_id is not None:
             try:
-                name_row = db.execute(text("""
+                table_name = "public.drugs" if not is_sqlite() else "drugs"
+                name_row = db.execute(text(f"""
                     SELECT trade_name, generic_name, COALESCE(manufacturer,'') AS manufacturer,
                            COALESCE(strength,'') AS strength, COALESCE(form,'') AS form
-                    FROM public.drugs WHERE id=:d
+                    FROM {table_name} WHERE id=:d
                 """), {"d": d_id}).mappings().first()
                 if name_row:
                     q2 = " ".join(x for x in [
@@ -585,34 +629,45 @@ def movement_adjust(request: Request,
         db.rollback()
         return _fail(str(ex))
 
-# ================== Autocomplete ==================
+# ================== Autocomplete / Dropdown ==================
 @router.get("/drugs/search", dependencies=[Depends(require_doc)])
-def drugs_search(q: str, db: Session = Depends(get_db)):
+def drugs_search(q: str = "", db: Session = Depends(get_db)):
     s = (q or "").strip()
+    
+    # إذا كانت الـ query فارغة، أرجع كل الأدوية النشطة
     if not s:
-        return JSONResponse({"items": []})
-    # استخدام LIKE مع UPPER في SQLite، أو ILIKE في PostgreSQL
-    if is_sqlite():
-        like_clause = """
-            UPPER(trade_name) LIKE UPPER(:q) OR
-            UPPER(generic_name) LIKE UPPER(:q) OR
-            UPPER(COALESCE(manufacturer,'')) LIKE UPPER(:q)
-        """
+        rows = db.execute(text(f"""
+            SELECT id, trade_name, generic_name, strength, form,
+                   COALESCE(manufacturer,'') AS manufacturer
+            FROM {'public.drugs' if not is_sqlite() else 'drugs'}
+            WHERE is_active=TRUE
+            ORDER BY trade_name
+            LIMIT 100
+        """)).mappings().all()
     else:
-        like_clause = """
-            trade_name ILIKE :q OR
-            generic_name ILIKE :q OR
-            COALESCE(manufacturer,'') ILIKE :q
-        """
-    rows = db.execute(text(f"""
-        SELECT id, trade_name, generic_name, strength, form,
-               COALESCE(manufacturer,'') AS manufacturer
-        FROM public.drugs
-        WHERE is_active=TRUE
-          AND ({like_clause})
-        ORDER BY trade_name
-        LIMIT 20
-    """), {"q": f"%{s}%"}).mappings().all()
+        # استخدام LIKE مع UPPER في SQLite، أو ILIKE في PostgreSQL
+        if is_sqlite():
+            like_clause = """
+                UPPER(trade_name) LIKE UPPER(:q) OR
+                UPPER(generic_name) LIKE UPPER(:q) OR
+                UPPER(COALESCE(manufacturer,'')) LIKE UPPER(:q)
+            """
+        else:
+            like_clause = """
+                trade_name ILIKE :q OR
+                generic_name ILIKE :q OR
+                COALESCE(manufacturer,'') ILIKE :q
+            """
+        rows = db.execute(text(f"""
+            SELECT id, trade_name, generic_name, strength, form,
+                   COALESCE(manufacturer,'') AS manufacturer
+            FROM {'public.drugs' if not is_sqlite() else 'drugs'}
+            WHERE is_active=TRUE
+              AND ({like_clause})
+            ORDER BY trade_name
+            LIMIT 20
+        """), {"q": f"%{s}%"}).mappings().all()
+    
     items = []
     for r in rows:
         label = " / ".join(filter(None, [r["trade_name"], r["generic_name"], r["strength"], r["form"]]))
