@@ -1,12 +1,13 @@
 # app/services/settings.py
 import json
+import os
 from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from ..models import SystemSetting
 
 
-PUBLIC_BASE_URL = "http://127.0.0.1:8000"
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000")
 
 # ---- helpers (قراءة قيمة فقط scalar) ---------------------------------
 def _get_value(db: Session, key: str) -> Optional[str]:
