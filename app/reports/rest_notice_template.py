@@ -67,7 +67,6 @@ REST_NOTICE_HTML = r"""<!doctype html>
 </head>
 <body>
 
-  <!-- الهيدر -->
   <div id="header_content">
     <table class="hdr" role="presentation" aria-hidden="true">
       <tr>
@@ -93,7 +92,6 @@ REST_NOTICE_HTML = r"""<!doctype html>
           <col style="width:18%"><col style="width:32%"><col style="width:18%"><col style="width:32%">
         </colgroup>
 
-        <!-- الصف 1: الاسم / رقم الهوية -->
         <tr>
           <td class="value">{{ shape(patient.national_id or '') }}</td>
           <td class="label">{{ shape('رقم الهوية') }}</td>
@@ -101,7 +99,6 @@ REST_NOTICE_HTML = r"""<!doctype html>
           <td class="label">{{ shape('الاسم') }}</td>
         </tr>
 
-        <!-- الصف 2: الرقم التدريبي/الوظيفي / رقم الجوال -->
         <tr>
           <td class="value">{{ shape(patient.mobile or '') }}</td>
           <td class="label">{{ shape('رقم الجوال') }}</td>
@@ -109,7 +106,6 @@ REST_NOTICE_HTML = r"""<!doctype html>
           <td class="label">{{ shape('الرقم التدريبي') if patient.patient_type=='trainee' else shape('الرقم الوظيفي') }}</td>
         </tr>
 
-        <!-- الصف 3: تاريخ الزيارة / عدد أيام الراحة -->
         <tr>
           <td class="value ltr">{{ visit_date }}</td>
           <td class="label">{{ shape('تاريخ الزيارة') }}</td>
@@ -117,7 +113,18 @@ REST_NOTICE_HTML = r"""<!doctype html>
           <td class="label">{{ shape('عدد أيام الراحة') }}</td>
         </tr>
 
-        <!-- الصف 4 (شرطي): التخصص للمتدرب فقط -->
+        <tr>
+          <td class="value" colspan="3">
+            {% if visit.chronic_json %}
+              {% set chronic_list = visit.chronic_json|safe %}
+              {{ shape(chronic_list) }}
+            {% else %}
+              <span>—</span>
+            {% endif %}
+          </td>
+          <td class="label">{{ shape('الأمراض المزمنة') }}</td>
+        </tr>
+
         {% if patient.patient_type=='trainee' %}
         <tr>
           <td class="value" colspan="3">{{ shape(patient.major or '') }}</td>
@@ -135,7 +142,6 @@ REST_NOTICE_HTML = r"""<!doctype html>
         <p>{{ shape('وتقبلوا خالص التحية والتقدير.') }}</p>
       </div>
 
-<!-- ===== التوقيع بشكل مبسط ===== -->
 <div style="margin-top:28px; text-align:left; direction:rtl; margin-left:25mm;">
   <p style="margin:0 0 5px 0; font-size:13pt;">
     {{ shape(doctor_name or '') }} {{ shape('طبيب الكلية :') }}
@@ -144,7 +150,6 @@ REST_NOTICE_HTML = r"""<!doctype html>
     ____________________ {{ shape('التوقيع :') }}
   </p>
 </div>
-<!-- ===== نهاية التعديل ===== -->
 
     </div></section>
   </div>
