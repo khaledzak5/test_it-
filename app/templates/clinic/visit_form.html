@@ -24,8 +24,8 @@
       {% if patient_card.major %}<div><span>التخصص</span><strong>{{ patient_card.major }}</strong></div>{% endif %}
       {% if patient_card.college %}<div><span>الكلية</span><strong>{{ patient_card.college }}</strong></div>{% endif %}
       <div>
-        <span>تاريخ الميلاد</span>
-        <strong>
+        <span>تاريخ الميلاد / العمر</span>
+        <strong id="birthAgeDisplay">
           {{ patient_card.birth_date or '—' }}
           {% if patient_card.birth_date and patient_card.age is not none %} ({{ patient_card.age }} سنة){% endif %}
         </strong>
@@ -196,11 +196,14 @@
     <div class="card" style="background:#f9fafb;border-color:#eef2f7">
       <div class="rx-search align-end">
         <label class="field" style="position:relative;margin:0">
-          <span class="lbl">ابحث عن دواء (اسم تجاري أو مادة فعّالة)</span>
-          <input type="text" id="drugSearch" placeholder="اكتب للبحث...">
+          <span class="lbl">اختر دواء من القائمة أو ابحث عن دواء</span>
+          <select id="drugSelect" style="padding:8px 10px; border:1px solid #e6e6e6; border-radius:10px; font-family:inherit; margin-bottom:6px;">
+            <option value="">-- اختر دواء --</option>
+          </select>
+          <input type="text" id="drugSearch" placeholder="أو اكتب للبحث...">
           <ul id="drugSuggest" class="suggest"></ul>
         </label>
-        <button class="btn btn-secondary" type="button" onclick="addFromInput()" style="margin:0">➕ إضافة</button>
+        <button class="btn btn-secondary" type="button" onclick="addFromSelect()" style="margin:0">➕ إضافة</button>
       </div>
 
       <div style="margin-top:10px">
@@ -371,33 +374,107 @@
 
   // ===== تحقّق واجهة بسيط قبل الإرسال =====
   document.getElementById('visitForm').addEventListener('submit', function(e){
+    e.preventDefault(); // منع الإرسال العادي
+    
     const temp = document.getElementById('tempC');
     const comp = document.getElementById('complaint');
     const diag = document.getElementById('diagnosis');
     {% if not patient_card.birth_date %}
       const age = document.getElementById('ageYears');
-      if(!age.value){ e.preventDefault(); alert('الرجاء إدخال العمر (سنوات).'); return; }
+      if(!age.value){ alert('الرجاء إدخال العمر (سنوات).'); return; }
     {% endif %}
-    if(!temp.value){ e.preventDefault(); alert('الرجاء إدخال درجة الحرارة.'); return; }
-    if(!comp.value.trim()){ e.preventDefault(); alert('الرجاء إدخال المشكلة/الشكوى.'); return; }
-    if(!diag.value.trim()){ e.preventDefault(); alert('الرجاء إدخال التشخيص.'); return; }
+    if(!temp.value){ alert('الرجاء إدخال درجة الحرارة.'); return; }
+    if(!comp.value.trim()){ alert('الرجاء إدخال المشكلة/الشكوى.'); return; }
+    if(!diag.value.trim()){ alert('الرجاء إدخال التشخيص.'); return; }
 
     // === جديد: العلاج المعطى إلزامي عند الإحالة الطبية ===
     const recType = document.getElementById('recType').value;
     const treat = document.getElementById('treatmentNotes') || document.querySelector('textarea[name="notes"]');
     if (recType === 'referral' && (!treat || !treat.value.trim())){
-      e.preventDefault();
       alert('عند اختيار إحالة طبية، يجب تعبئة حقل "العلاج المعطى".');
       return;
     }
+
+    // تحضير البيانات للإرسال
+    const formData = new FormData(this);
+    
+    // إرسال البيانات عبر AJAX
+    console.log('Submitting form...');
+    fetch('/clinic/visits/create', {
+      method: 'POST',
+      body: formData
+    })
+    .then(r => {
+      console.log('Response status:', r.status);
+      console.log('Response headers:', r.headers.get('content-type'));
+      return r.json();
+    })
+    .then(data => {
+      console.log('Response data:', data);
+      if (!data.success) {
+        alert('خطأ: ' + (data.error || 'فشل حفظ الزيارة'));
+        return;
+      }
+      
+      // الزيارة تم حفظها بنجاح
+      alert('تم حفظ الزيارة بنجاح');
+      
+      console.log('Visit ID:', data.visit_id, 'Recommendation:', data.recommendation);
+      
+      // إذا كانت هناك إحالة أو راحة، افتح الطباعة تلقائياً
+      if (data.recommendation === 'rest' && data.visit_id) {
+        // طباعة إشعار الراحة
+        console.log('Opening rest notice for visit:', data.visit_id);
+        window.open('/clinic/reports/rest_notice/by_visit?visit_id=' + data.visit_id, '_blank');
+      } else if (data.recommendation === 'referral' && data.visit_id) {
+        // طباعة الإحالة الطبية
+        console.log('Opening referral notice for visit:', data.visit_id);
+        window.open('/clinic/reports/referral_notice/by_visit?visit_id=' + data.visit_id, '_blank');
+      } else {
+        // لا توجد إحالة ولا راحة، أغلق الصفحة أو ارجع
+        console.log('No recommendation, redirecting...');
+        setTimeout(() => {
+          window.location.href = '/clinic/?msg=visit_saved';
+        }, 500);
+      }
+    })
+    .catch(err => {
+      console.error('Request error:', err);
+      alert('خطأ في الاتصال: ' + err.message);
+    });
   });
 
-  // ===== صرف الدواء: Autocomplete =====
+  // ===== صرف الدواء: Autocomplete + Dropdown =====
   const drugInput = document.getElementById('drugSearch');
+  const drugSelect = document.getElementById('drugSelect');
   const suggest   = document.getElementById('drugSuggest');
   const tableBody = document.getElementById('rxTable');
   const rxJson    = document.getElementById('rxJson');
   const rxMap     = new Map(); // id -> {label, qty, note}
+
+  // تحميل الأدوية وملء الـ dropdown
+  function loadAllDrugs(){
+    fetch('/clinic/pharmacy/drugs/search?q=')
+      .then(r=>r.json())
+      .then(data=>{
+        const items = (data && data.items) || [];
+        if (items.length) {
+          // ملء الـ dropdown
+          items.forEach(it => {
+            const opt = document.createElement('option');
+            opt.value = it.id;
+            opt.textContent = it.label;
+            drugSelect.appendChild(opt);
+          });
+        } else {
+          console.warn('No drugs found');
+        }
+      })
+      .catch(e=>console.error('Failed to load drugs:', e));
+  }
+
+  // تحميل الأدوية عند تحميل الصفحة
+  document.addEventListener('DOMContentLoaded', loadAllDrugs);
 
   let debounceT = null;
   if (drugInput){
@@ -410,7 +487,7 @@
   }
 
   function searchDrugs(q){
-    fetch(`/clinic/drugs/search?q=${encodeURIComponent(q)}`)
+    fetch(`/clinic/pharmacy/drugs/search?q=${encodeURIComponent(q)}`)
       .then(r=>r.json())
       .then(data=>{
         const items = (data && data.items) || [];
@@ -434,6 +511,15 @@
   document.addEventListener('click', function(e){
     if (!suggest.contains(e.target) && e.target !== drugInput) suggest.style.display='none';
   });
+
+  function addFromSelect(){
+    const selectedId = parseInt(drugSelect.value, 10);
+    const selectedOption = drugSelect.options[drugSelect.selectedIndex];
+    if (!selectedId || selectedId <= 0){ alert('اختر دواءً من القائمة.'); return; }
+    const label = selectedOption.textContent;
+    addDrug(selectedId, label);
+    drugSelect.value = ''; // إعادة تعيين الـ dropdown
+  }
 
   function addFromInput(){
     const li = suggest.querySelector('li');
@@ -487,5 +573,47 @@
   }catch(_){}
 
   function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+  // ===== حساب العمر من تاريخ الميلاد =====
+  function calculateAge(birthDateStr) {
+    if (!birthDateStr) return null;
+    
+    // محاولة تحليل التاريخ (YYYY-MM-DD أو DD/MM/YYYY)
+    let birthDate;
+    if (birthDateStr.includes('-')) {
+      // YYYY-MM-DD
+      birthDate = new Date(birthDateStr);
+    } else if (birthDateStr.includes('/')) {
+      // DD/MM/YYYY
+      const parts = birthDateStr.split('/');
+      if (parts.length === 3) {
+        birthDate = new Date(parts[2], parts[1]-1, parts[0]);
+      }
+    } else {
+      return null;
+    }
+    
+    if (isNaN(birthDate)) return null;
+    
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age >= 0 ? age : null;
+  }
+
+  // تحديث عرض العمر عند تحميل الصفحة
+  document.addEventListener('DOMContentLoaded', function() {
+    const display = document.getElementById('birthAgeDisplay');
+    if (display) {
+      const birthDateText = display.textContent.split(' ')[0]; // استخرج التاريخ فقط
+      const age = calculateAge(birthDateText);
+      if (age !== null && birthDateText !== '—') {
+        display.textContent = birthDateText + ' (' + age + ' سنة)';
+      }
+    }
+  });
 </script>
 {% endblock %}

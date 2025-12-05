@@ -68,7 +68,15 @@
         <td>{{ r.id }}</td>
         <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else '' }}</td>
         <td>
-          <b>{{ r.trade_name }}</b>
+          <b>
+            {% if r.trade_name and r.trade_name.strip() %}
+              {{ r.trade_name }}
+            {% elif r.drug_name and r.drug_name.strip() %}
+              {{ r.drug_name }}
+            {% else %}
+              —
+            {% endif %}
+          </b>
           <span class="muted">{{ r.generic_name }}</span>
           <div class="muted sm">{{ r.strength }} / {{ r.form }}</div>
         </td>
