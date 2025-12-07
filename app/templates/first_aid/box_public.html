@@ -94,6 +94,11 @@
     <div style="margin-bottom:20px;">
       <h2 style="text-align:center;color:#0f7d89;margin:0 0 8px 0;">{{ box.box_name }}</h2>
       <p style="text-align:center;color:#555;margin:0 0 12px 0;font-size:13pt;">📍 {{ box.location }}</p>
+      {% if box.last_reviewed_at %}
+      <p style="text-align:center;color:#10b981;margin:0;font-size:11pt;font-weight:600;">
+        🔍 آخر مراجعة: {{ box.last_reviewed_at.strftime('%d/%m/%Y %H:%M') }}
+      </p>
+      {% endif %}
     </div>
 
     <div class="card" style="margin-bottom:18px;border:1.2px solid #c5d6de;border-radius:10px;">

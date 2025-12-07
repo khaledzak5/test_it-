@@ -438,6 +438,16 @@
       </div>
 
       <div class="form-group">
+        <label for="supplyExpiryDate">تاريخ الصلاحية</label>
+        <input 
+          type="date" 
+          id="supplyExpiryDate" 
+          name="expiry_date"
+          placeholder="اختر تاريخ الانتهاء"
+        >
+      </div>
+
+      <div class="form-group">
         <label for="supplyNotes">ملاحظات (اختياري)</label>
         <input 
           type="text" 
@@ -479,8 +489,9 @@
 
     const quantity = parseInt(document.getElementById('supplyQuantityInput').value);
     const notes = document.getElementById('supplyNotes').value;
+    const expiry_date = document.getElementById('supplyExpiryDate').value;
 
-    const url = `/inventory/supply-drugs/process?drug_id=${selectedSupplyDrug.id}&quantity=${quantity}&notes=${encodeURIComponent(notes)}`;
+    const url = `/inventory/supply-drugs/process?drug_id=${selectedSupplyDrug.id}&quantity=${quantity}&notes=${encodeURIComponent(notes)}&expiry_date=${expiry_date}`;
     window.location.href = url;
   }
 

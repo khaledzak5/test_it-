@@ -267,6 +267,15 @@
       📅 <span><strong>تم الإنشاء:</strong> {{ box.created_at.strftime('%d/%m/%Y') }}</span>
     </div>
     <div class="box-meta-item">
+      🔍 <span><strong>آخر مراجعة:</strong> 
+        {% if box.last_reviewed_at %}
+          {{ box.last_reviewed_at.strftime('%d/%m/%Y %H:%M') }}
+        {% else %}
+          لم يتم بعد
+        {% endif %}
+      </span>
+    </div>
+    <div class="box-meta-item">
       📋 <span><strong>عدد المحتويات:</strong> {{ items|length }} عنصر</span>
     </div>
     </div>

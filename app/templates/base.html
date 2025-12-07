@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <title>Guidxus | لادارة خدمات المتدربين</title>
+  <title>Guidxus</title>
 
-  <link rel="icon" type="image/jpeg" href="{{ ui_favicon_url or '/static/images/favicon.jpg' }}">
-  <link rel="apple-touch-icon" href="{{ ui_favicon_url or '/static/images/favicon.jpg' }}">
-  <link rel="shortcut icon" href="{{ ui_favicon_url or '/static/images/favicon.jpg' }}" type="image/jpeg">
+  <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
+  <link rel="apple-touch-icon" href="/static/images/favicon.ico">
+  <link rel="shortcut icon" href="/static/images/favicon.ico" type="image/x-icon">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,8 +32,10 @@
     }
     
     .site-header .logo { 
-      height: 200px; /* نفس الحجم الكبير */
+      height: 120px; /* تكبير اللوجو */
       width: auto; 
+      margin-right: 60px; /* تحريك اللوجو شمال */
+      background: transparent;
     }
     
     .site-header .site-title { 
@@ -89,11 +91,11 @@
       {% if ui_logo_url %}
         <img src="{{ ui_logo_url }}" alt="{{ app_name or 'Logo' }}" class="logo">
       {% else %}
-        <img src="/static/images/logo.jpg" alt="{{ app_name or 'Logo' }}" class="logo">
+        <img src="/static/images/favicon.ico" alt="{{ app_name or 'Logo' }}" class="logo">
       {% endif %}
       
       <div class="titles">
-        <h1 class="site-title">{{ app_name or "منصة إدارة خدمات المتدربين" }}</h1>
+        <h1 class="site-title">نظام Guidxus لإدارة خدمات المتدربين</h1>
         <div class="breadcrumb">{% block breadcrumb %}{% endblock %}</div>
       </div>
     </div>

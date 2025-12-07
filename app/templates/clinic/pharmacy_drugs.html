@@ -31,6 +31,7 @@
             <th data-sort="txt">العلمي</th>
             <th data-sort="txt">الجرعة</th>
             <th data-sort="txt">الشكل</th>
+            <th data-sort="txt">الوحدة</th>
             <th data-sort="txt">الشركة</th>
             <th data-sort="num" style="width:90px">رصيد</th>
             <th style="width:150px">إجراءات</th>
@@ -44,6 +45,7 @@
             <td class="muted">{{ r.generic_name }}</td>
             <td>{{ r.strength }}</td>
             <td>{{ r.form }}</td>
+            <td>{{ r.unit or '—' }}</td>
             <td class="muted">{{ r.manufacturer }}</td>
             <td class="num">
               {% set qty = r.stock_main or 0 %}
@@ -91,6 +93,30 @@
       <input name="strength" placeholder="الجرعة (مثال: 500 mg)">
       <input name="form" placeholder="الشكل (Tablet / Syrup...)">
       <input name="manufacturer" placeholder="الشركة المنتجة">
+      <select name="unit" placeholder="وحدة الدواء">
+        <option value="">-- اختر وحدة الدواء --</option>
+        <option value="Tablet">قرص (Tablet)</option>
+        <option value="Capsule">كبسولة (Capsule)</option>
+        <option value="Ampoule">أمبولة (Ampoule)</option>
+        <option value="Vial">قارورة (Vial)</option>
+        <option value="Bottle">زجاجة (Bottle)</option>
+        <option value="Syrup">شراب (Syrup)</option>
+        <option value="Suspension">معلق (Suspension)</option>
+        <option value="Powder">بودرة (Powder)</option>
+        <option value="Cream">كريم (Cream)</option>
+        <option value="Ointment">مرهم (Ointment)</option>
+        <option value="Gel">جل (Gel)</option>
+        <option value="Lotion">غسول (Lotion)</option>
+        <option value="Spray">بخاخ (Spray)</option>
+        <option value="Solution">محلول (Solution)</option>
+        <option value="Drops">قطرات (Drops)</option>
+        <option value="Patch">لصقة (Patch)</option>
+        <option value="Suppository">تحميلة (Suppository)</option>
+        <option value="Injection">حقنة (Injection)</option>
+        <option value="ml">ملي لتر (ml)</option>
+        <option value="gram">غرام (gram)</option>
+        <option value="unit">وحدة (unit)</option>
+      </select>
       <div class="actions"><button class="btn primary">حفظ</button></div>
     </form>
 
@@ -113,6 +139,30 @@
       <input name="strength" id="f_strength" placeholder="الجرعة">
       <input name="form" id="f_form" placeholder="الشكل">
       <input name="manufacturer" id="f_manu" placeholder="الشركة">
+      <select name="unit" id="f_unit" placeholder="وحدة الدواء">
+        <option value="">-- لا توجد وحدة --</option>
+        <option value="Tablet">قرص (Tablet)</option>
+        <option value="Capsule">كبسولة (Capsule)</option>
+        <option value="Ampoule">أمبولة (Ampoule)</option>
+        <option value="Vial">قارورة (Vial)</option>
+        <option value="Bottle">زجاجة (Bottle)</option>
+        <option value="Syrup">شراب (Syrup)</option>
+        <option value="Suspension">معلق (Suspension)</option>
+        <option value="Powder">بودرة (Powder)</option>
+        <option value="Cream">كريم (Cream)</option>
+        <option value="Ointment">مرهم (Ointment)</option>
+        <option value="Gel">جل (Gel)</option>
+        <option value="Lotion">غسول (Lotion)</option>
+        <option value="Spray">بخاخ (Spray)</option>
+        <option value="Solution">محلول (Solution)</option>
+        <option value="Drops">قطرات (Drops)</option>
+        <option value="Patch">لصقة (Patch)</option>
+        <option value="Suppository">تحميلة (Suppository)</option>
+        <option value="Injection">حقنة (Injection)</option>
+        <option value="ml">ملي لتر (ml)</option>
+        <option value="gram">غرام (gram)</option>
+        <option value="unit">وحدة (unit)</option>
+      </select>
       <div class="actions">
         <button class="btn" data-close type="button">إلغاء</button>
         <button class="btn primary" type="submit">حفظ</button>
