@@ -175,7 +175,7 @@ def export_rest_notice_by_visit(
     # اجلب الزيارة + الحقول التي نحتاجها
     v = db.execute(text("""
         SELECT id, patient_type, trainee_no, employee_no,
-               visit_at, rec_json, recommendation, rest_days
+               visit_at, rec_json, recommendation, rest_days, chronic_json
         FROM clinic_patients
         WHERE record_kind='visit' AND id=:vid
         LIMIT 1
@@ -240,6 +240,9 @@ def export_rest_notice_by_visit(
             else (str(v.get("visit_at")).split()[0] if v.get("visit_at") else "")
         ),
         "rest_days": int(days),  # من الـ DB فقط
+        "visit": {
+            "chronic_json": v.get("chronic_json"),  # للأمراض المزمنة في التقرير
+        },
         "doctor_name": (request.session.get("user") or {}).get("full_name"),
         "created_by_name": (request.session.get("user") or {}).get("full_name"),
         "logo_src": logo_src,
@@ -1173,53 +1176,39 @@ def visits_list(
 ):
     visits = []
     
+    # جلب جميع الزيارات من جدول clinic_patients مرتبة بالتاريخ
     try:
-        from app.models import Visit
-        visits = db.query(Visit).all() if hasattr(Visit, '__table__') else []
-    except Exception:
-        pass
-    
-    # إذا لم نجد زيارات من قاعدة البيانات، جرّب الإكسيل
-    if not visits:
-        try:
-            import sys
-            import os
-            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-            from excel_data_reference import get_clinic_patients_by_college
-            
-            # جمع بيانات الزيارات من سجل المرضى
-            all_patients = []
-            try:
-                # محاولة الحصول على جميع المرضى من جميع الكليات
-                all_patients = db.execute(text("""
-                    SELECT DISTINCT college FROM clinic_patients WHERE college IS NOT NULL
-                """)).scalars().all()
-            except Exception:
-                pass
-            
-            visits_data = []
-            for patient in all_patients:
-                try:
-                    patients = get_clinic_patients_by_college(patient)
-                    visits_data.extend(patients)
-                except Exception:
-                    pass
-            
-            # تحويل البيانات لصيغة صحيحة
-            visits = []
-            for p in visits_data[:100]:  # حد أقصى 100 سجل
-                visits.append({
-                    "trainee_no": p.get('trainee_no'),
-                    "full_name": p.get('full_name', ''),
-                    "complaint": p.get('complaint', ''),
-                    "diagnosis": p.get('diagnosis', ''),
-                    "visit_at": p.get('visit_at'),
-                    "created_at": p.get('created_at'),
-                    "college": p.get('college', ''),
-                    "excel_source": True
-                })
-        except Exception:
-            pass
+        all_patients = db.execute(text("""
+            SELECT 
+                id,
+                trainee_no,
+                full_name,
+                record_kind,
+                college,
+                complaint,
+                diagnosis,
+                created_at,
+                visit_at
+            FROM clinic_patients
+            WHERE record_kind = 'visit'
+            ORDER BY visit_at DESC NULLS LAST, created_at DESC
+        """)).fetchall()
+        
+        for row in all_patients:
+            visits.append({
+                "id": row[0],
+                "trainee_no": row[1],
+                "full_name": row[2],
+                "record_kind": row[3],
+                "college": row[4],
+                "complaint": row[5],
+                "diagnosis": row[6],
+                "created_at": row[7],
+                "visit_at": row[8],
+                "source": "database"
+            })
+    except Exception as e:
+        print(f"خطأ في جلب البيانات من clinic_patients: {e}")
     
     return templates.TemplateResponse(
         "clinic/visits_list.html",

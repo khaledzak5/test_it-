@@ -167,7 +167,7 @@ def drugs_list(request: Request,
                 where += " AND (d.trade_name ILIKE :q OR d.generic_name ILIKE :q OR COALESCE(d.manufacturer,'') ILIKE :q)"
             params["q"] = f"%{q.strip()}%"
         rows = db.execute(text(f"""
-            SELECT d.id, d.trade_name, d.generic_name, d.strength, d.form,
+            SELECT d.id, d.trade_name, d.generic_name, d.strength, d.form, d.unit,
                    '' AS manufacturer,
                    COALESCE(ps.balance_qty,0) AS stock_main
             FROM drugs d
@@ -223,6 +223,7 @@ def drugs_create(request: Request,
                  strength: Optional[str] = Form(default=None),
                  form: Optional[str] = Form(default=None),
                  manufacturer: Optional[str] = Form(default=None),
+                 unit: Optional[str] = Form(default=None),
                  db: Session = Depends(get_db)):
     try:
         table_name = "public.drugs" if not is_sqlite() else "drugs"
@@ -231,10 +232,10 @@ def drugs_create(request: Request,
         drug_code = f"DRUG-{uuid.uuid4().hex[:8].upper()}"
         
         db.execute(text(f"""
-            INSERT INTO {table_name} (drug_code, trade_name, generic_name, strength, form, manufacturer, is_active, created_by)
-            VALUES (:dc, :tn, :gn, :st, :fm, :m, TRUE, :uid)
+            INSERT INTO {table_name} (drug_code, trade_name, generic_name, strength, form, manufacturer, unit, is_active, created_by)
+            VALUES (:dc, :tn, :gn, :st, :fm, :m, :u, TRUE, :uid)
         """), {"dc": drug_code, "tn": trade_name.strip(), "gn": _clean(generic_name), "st": _clean(strength),
-               "fm": _clean(form), "m": _clean(manufacturer), "uid": _uid(request)})
+               "fm": _clean(form), "m": _clean(manufacturer), "u": _clean(unit), "uid": _uid(request)})
         db.commit()
         return RedirectResponse(url="/clinic/pharmacy/drugs?msg=added", status_code=303)
     except Exception as ex:
@@ -250,6 +251,7 @@ def drugs_update(request: Request,
                  strength: Optional[str] = Form(default=None),
                  form: Optional[str] = Form(default=None),
                  manufacturer: Optional[str] = Form(default=None),
+                 unit: Optional[str] = Form(default=None),
                  db: Session = Depends(get_db)):
     try:
         table_name = "public.drugs" if not is_sqlite() else "drugs"
@@ -261,12 +263,13 @@ def drugs_update(request: Request,
                    strength=:st,
                    form=:fm,
                    manufacturer=:m,
+                   unit=:u,
                    updated_at={timestamp_col},
                    updated_by=:uid
              WHERE id=:id AND is_active=TRUE
         """), {"id": drug_id, "tn": trade_name.strip(), "gn": _clean(generic_name),
                "st": _clean(strength), "fm": _clean(form), "m": _clean(manufacturer),
-               "uid": _uid(request)})
+               "u": _clean(unit), "uid": _uid(request)})
         db.commit()
         return RedirectResponse(url="/clinic/pharmacy/drugs?msg=updated", status_code=303)
     except Exception as ex:

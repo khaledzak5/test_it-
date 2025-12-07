@@ -120,6 +120,10 @@ def box_detail(
     if not box:
         raise HTTPException(status_code=404, detail="الصندوق غير موجود")
     
+    # تحديث آخر تاريخ مراجعة عند الدخول على الصندوق
+    box.last_reviewed_at = datetime.now()
+    db.commit()
+    
     # توليد QR code يشير للصفحة العامة
     qr_url = f"{request.base_url}first-aid/boxes/{box_id}/public"
     qr = qrcode.QRCode(version=1, box_size=10, border=2)

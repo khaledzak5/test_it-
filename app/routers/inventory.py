@@ -15,21 +15,54 @@ templates = Jinja2Templates(directory="app/templates")
 def inv_index(request: Request, user=Depends(require_doc)):
     return templates.TemplateResponse("inventory/index.html", {"request": request})
 
-@router.get("/items")
-def items_page(request: Request, user=Depends(require_doc), db: Session = Depends(get_db)):
-    return templates.TemplateResponse("inventory/items.html", {"request": request})
-
-@router.get("/lots")
-def lots_page(request: Request, user=Depends(require_doc), db: Session = Depends(get_db)):
-    return templates.TemplateResponse("inventory/lots.html", {"request": request})
-
 @router.get("/stock-levels")
 def stock_levels(request: Request, user=Depends(require_doc), db: Session = Depends(get_db)):
     return templates.TemplateResponse("inventory/stock_levels.html", {"request": request})
 
 @router.get("/alerts")
 def alerts_page(request: Request, user=Depends(require_doc), db: Session = Depends(get_db)):
-    return templates.TemplateResponse("inventory/alerts.html", {"request": request})
+    """صفحة عرض تنبيهات الأدوية قريبة الانتهاء"""
+    from datetime import datetime, timedelta
+    
+    # الحصول على الأدوية قريبة الانتهاء أو المنتهية الصلاحية
+    today = datetime.now().date()
+    soon = today + timedelta(days=30)  # تنبيه للأدوية التي تنتهي خلال 30 يوم
+    
+    expiring_drugs = db.execute(text('''
+        SELECT DISTINCT
+            d.id,
+            d.trade_name,
+            d.generic_name,
+            d.strength,
+            d.form,
+            dt.expiry_date,
+            dt.created_at,
+            CASE WHEN dt.expiry_date < DATE('now') THEN 1 ELSE 0 END as is_expired
+        FROM drugs d
+        LEFT JOIN drug_transactions dt ON d.id = dt.drug_id
+        WHERE dt.expiry_date IS NOT NULL
+        AND (dt.expiry_date < DATE('now') OR dt.expiry_date <= DATE(:soon))
+        ORDER BY dt.expiry_date ASC
+    '''), {'soon': soon}).fetchall()
+    
+    expiring_list = [
+        {
+            'id': row[0],
+            'trade_name': row[1],
+            'generic_name': row[2],
+            'strength': row[3],
+            'form': row[4],
+            'expiry_date': row[5],
+            'added_date': row[6],
+            'is_expired': bool(row[7])
+        }
+        for row in expiring_drugs
+    ]
+    
+    return templates.TemplateResponse("inventory/alerts.html", {
+        "request": request,
+        "expiring_drugs": expiring_list
+    })
 
 # ===================== صرف الأدوية لصناديق الإسعافات =====================
 @router.get("/dispense-drugs")
@@ -235,6 +268,7 @@ def process_drug_supply(
     drug_id: int = Query(...),
     quantity: int = Query(...),
     notes: str = Query(default=""),
+    expiry_date: str = Query(default=""),
     user=Depends(require_doc),
     db: Session = Depends(get_db)
 ):
@@ -248,33 +282,63 @@ def process_drug_supply(
     if not drug:
         raise HTTPException(status_code=404, detail="الدواء غير موجود")
     
-    # إضافة إلى المستودع
-    db.execute(text('''
-        UPDATE warehouse_stock
-        SET balance_qty = balance_qty + :qty
-        WHERE drug_id = :did
-    '''), {'qty': quantity, 'did': drug_id})
+    # تحويل تاريخ الصلاحية
+    expiry_date_obj = None
+    if expiry_date:
+        try:
+            from datetime import datetime
+            expiry_date_obj = datetime.strptime(expiry_date, "%Y-%m-%d").date()
+        except Exception:
+            pass
     
-    # إضافة إلى الصيدلية
-    db.execute(text('''
-        UPDATE pharmacy_stock
-        SET balance_qty = balance_qty + :qty
-        WHERE drug_id = :did
-    '''), {'qty': quantity, 'did': drug_id})
+    # إضافة أو تحديث في المستودع - التحقق أولاً
+    warehouse_exists = db.execute(text('''
+        SELECT id FROM warehouse_stock WHERE drug_id = :did
+    '''), {'did': drug_id}).fetchone()
     
-    # تسجيل المعاملة
+    if warehouse_exists:
+        db.execute(text('''
+            UPDATE warehouse_stock
+            SET balance_qty = balance_qty + :qty
+            WHERE drug_id = :did
+        '''), {'qty': quantity, 'did': drug_id})
+    else:
+        db.execute(text('''
+            INSERT INTO warehouse_stock (drug_id, balance_qty)
+            VALUES (:did, :qty)
+        '''), {'did': drug_id, 'qty': quantity})
+    
+    # إضافة أو تحديث في الصيدلية - التحقق أولاً
+    pharmacy_exists = db.execute(text('''
+        SELECT id FROM pharmacy_stock WHERE drug_id = :did
+    '''), {'did': drug_id}).fetchone()
+    
+    if pharmacy_exists:
+        db.execute(text('''
+            UPDATE pharmacy_stock
+            SET balance_qty = balance_qty + :qty
+            WHERE drug_id = :did
+        '''), {'qty': quantity, 'did': drug_id})
+    else:
+        db.execute(text('''
+            INSERT INTO pharmacy_stock (drug_id, balance_qty)
+            VALUES (:did, :qty)
+        '''), {'did': drug_id, 'qty': quantity})
+    
+    # تسجيل المعاملة مع تاريخ الصلاحية
     supply_notes = f"توريد: {notes}" if notes else "توريد إلى المستودع"
     db.execute(text('''
         INSERT INTO drug_transactions 
-        (drug_id, transaction_type, quantity_change, source, destination, notes, created_at)
-        VALUES (:did, :type, :qty, :src, :dst, :notes, datetime('now'))
+        (drug_id, transaction_type, quantity_change, source, destination, notes, expiry_date, created_at)
+        VALUES (:did, :type, :qty, :src, :dst, :notes, :exp, datetime('now'))
     '''), {
         'did': drug_id,
         'type': 'supply_received',
         'qty': quantity,
         'src': 'external_supplier',
         'dst': 'warehouse_pharmacy',
-        'notes': supply_notes
+        'notes': supply_notes,
+        'exp': expiry_date_obj
     })
     
     db.commit()
