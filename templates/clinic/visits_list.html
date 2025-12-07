@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block breadcrumb %}العيادة الطبية › سجل الزيارات{% endblock %}
+{% block content %}
+
+<style>
+  .visits-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+  .visits-table th {
+    background: #e9f7f9;
+    color: #0f7d89;
+    padding: 12px;
+    text-align: right;
+    border: 1px solid #c5d6de;
+  }
+  .visits-table td {
+    padding: 12px;
+    border: 1px solid #e6f0f2;
+  }
+  .visits-table tr:hover {
+    background: #f9fbfc;
+  }
+  .no-results {
+    text-align: center;
+    padding: 40px;
+    color: #999;
+  }
+  .results-count {
+    color: #666;
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+  }
+</style>
+
+<div class="card">
+  <div class="card-head"><span class="card-icon">📄</span><h3>سجل الزيارات</h3></div>
+  
+  {% if visits %}
+    <div class="results-count">
+      إجمالي الزيارات: <strong>{{ visits|length }}</strong>
+    </div>
+    <table class="visits-table">
+      <thead>
+        <tr>
+          <th>تاريخ الزيارة</th>
+          <th>الرقم المرجعي</th>
+          <th>الاسم الكامل</th>
+          <th>الشكوى</th>
+          <th>التشخيص</th>
+          <th>الكلية</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for visit in visits %}
+        <tr>
+          <td><strong>{{ visit.visit_at or visit.created_at }}</strong></td>
+          <td>{{ visit.trainee_no }}</td>
+          <td>{{ visit.full_name }}</td>
+          <td>{{ visit.complaint }}</td>
+          <td>{{ visit.diagnosis }}</td>
+          <td>{{ visit.college }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="no-results">
+      <p>❌ لا توجد زيارات حتى الآن</p>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}
